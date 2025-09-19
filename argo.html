@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARGO Ocean Data Explorer - AI Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background: linear-gradient(135deg, #001f3f 0%, #003d7a 25%, #0074d9 50%, #39cccc 75%, #7fdbff 100%);
+            background-size: 400% 400%;
+            animation: oceanFlow 15s ease-in-out infinite;
+            min-height: 100vh;
+        }
+        @keyframes oceanFlow {
+            0%, 100% { background-position: 0% 50%; }
+            25% { background-position: 100% 50%; }
+            50% { background-position: 50% 100%; }
+            75% { background-position: 0% 100%; }
+        }
+        .gradient-bg { 
+            background: linear-gradient(135deg, rgba(15, 76, 117, 0.95) 0%, rgba(50, 130, 184, 0.95) 50%, rgba(187, 225, 250, 0.95) 100%);
+            backdrop-filter: blur(10px);
+        }
+        .ocean-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .chat-bubble { animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .typing-indicator { animation: pulse 1.5s infinite; }
+        .ocean-wave { 
+            background: linear-gradient(45deg, #0077be, #00a8cc, #39cccc, #7fdbff);
+            background-size: 300% 300%;
+            animation: wave 4s ease-in-out infinite;
+        }
+        @keyframes wave { 
+            0%, 100% { background-position: 0% 50%; } 
+            33% { background-position: 100% 50%; }
+            66% { background-position: 50% 100%; }
+        }
+        .depth-gradient {
+            background: linear-gradient(to bottom, #87ceeb 0%, #4682b4 20%, #191970 50%, #000080 80%, #000033 100%);
+        }
+        .profile-container {
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.98) 0%, rgba(240, 248, 255, 0.98) 100%);
+            border: 2px solid rgba(59, 130, 246, 0.2);
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header class="gradient-bg text-white shadow-lg">
+        <div class="container mx-auto px-6 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-3">
+                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center">
+                        <span class="text-2xl">🌊</span>
+                    </div>
+                    <div>
+                        <h1 class="text-2xl font-bold">ARGO Ocean Data Explorer</h1>
+                        <p class="text-blue-100 text-sm">AI-Powered Oceanographic Analysis System</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <p class="text-sm text-blue-100">INCOIS - Ministry of Earth Sciences</p>
+                    <p class="text-xs text-blue-200">Indian Ocean Data Repository</p>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="container mx-auto px-6 py-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Chat Interface -->
+            <div class="lg:col-span-1 ocean-card rounded-xl shadow-2xl overflow-hidden">
+                <div class="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-4">
+                    <h2 class="text-lg font-semibold flex items-center">
+                        <span class="mr-2">🤖</span>
+                        FloatChat
+                    </h2>
+                    <p class="text-blue-100 text-sm">Ask questions about ARGO float data</p>
+                </div>
+                
+                <div id="chatContainer" class="h-96 overflow-y-auto p-4 space-y-4">
+                    <div class="chat-bubble bg-blue-50 p-3 rounded-lg">
+                        <div class="flex items-start space-x-2">
+                            <span class="text-blue-600 font-semibold">🤖 AI:</span>
+                            <p class="text-gray-700">Hello! I'm your ARGO data assistant. I can help you explore oceanographic data from autonomous floats across the Indian Ocean. Try asking me about salinity profiles, temperature data, or float locations!</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="p-4 border-t">
+                    <div class="flex space-x-2">
+                        <input 
+                            type="text" 
+                            id="userInput" 
+                            placeholder="Ask about ocean data..." 
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            onkeypress="handleKeyPress(event)"
+                        >
+                        <button 
+                            onclick="sendMessage()" 
+                            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
+                        >
+                            Send
+                        </button>
+                    </div>
+                    <div class="mt-2 flex flex-wrap gap-2">
+                        <button onclick="sendSampleQuery('Show me salinity profiles near the equator in March 2023')" class="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-full transition-colors">Sample: Equatorial salinity</button>
+                        <button onclick="sendSampleQuery('Compare BGC parameters in Arabian Sea')" class="text-xs bg-gray-100 hover:bg-gray-200 px-2 py-1 rounded-full transition-colors">Sample: BGC comparison</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Dashboard -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Map Visualization -->
+                <div class="ocean-card rounded-xl shadow-2xl overflow-hidden">
+                    <div class="bg-gray-50 px-6 py-4 border-b">
+                        <h3 class="text-lg font-semibold text-gray-800 flex items-center">
+                            <span class="mr-2">🗺</span>
+                            ARGO Float Locations - Indian Ocean
+                        </h3>
+                    </div>
+                    <div id="map" class="h-80"></div>
+                </div>
+
+                <!-- Data Visualization -->
+                <div class="ocean-card rounded-xl shadow-2xl overflow-hidden">
+                    <div class="ocean-wave px-6 py-4 border-b text-white">
+                        <h3 class="text-lg font-semibold flex items-center">
+                            <span class="mr-2">🌊</span>
+                            Advanced Ocean Profile Analysis
+                        </h3>
+                        <p class="text-blue-100 text-sm mt-1">Real-time ARGO float measurements and depth analysis</p>
+                    </div>
+                    <div class="p-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div class="profile-container rounded-lg p-4">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h4 class="font-semibold text-gray-700 flex items-center">
+                                        🌡 Temperature Profile
+                                    </h4>
+                                    <span class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full">Live Data</span>
+                                </div>
+                                <div id="temperatureProfile" class="h-72"></div>
+                                <div class="mt-3 text-xs text-gray-600">
+                                    <p>📍 Float ID: ARGO_003 | 📅 Last Update: 2 hours ago</p>
+                                    <p>🎯 Location: 12.1°N, 82.4°E | 📏 Max Depth: 2000m</p>
+                                </div>
+                            </div>
+                            <div class="profile-container rounded-lg p-4">
+                                <div class="flex items-center justify-between mb-3">
+                                    <h4 class="font-semibold text-gray-700 flex items-center">
+                                        🧂 Salinity Profile
+                                    </h4>
+                                    <span class="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded-full">Live Data</span>
+                                </div>
+                                <div id="salinityProfile" class="h-72"></div>
+                                <div class="mt-3 text-xs text-gray-600">
+                                    <p>📍 Float ID: ARGO_003 | 📅 Last Update: 2 hours ago</p>
+                                    <p>⚖ Range: 34.5-35.8 PSU | 🌊 Water Mass: Tropical</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg p-4 border border-blue-200">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-blue-600 text-sm font-medium">Thermocline Depth</p>
+                                        <p class="text-xl font-bold text-blue-800">185m</p>
+                                    </div>
+                                    <div class="w-10 h-10 bg-blue-200 rounded-full flex items-center justify-center">
+                                        <span class="text-lg">🌡</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-teal-50 to-teal-100 rounded-lg p-4 border border-teal-200">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-teal-600 text-sm font-medium">Mixed Layer Depth</p>
+                                        <p class="text-xl font-bold text-teal-800">45m</p>
+                                    </div>
+                                    <div class="w-10 h-10 bg-teal-200 rounded-full flex items-center justify-center">
+                                        <span class="text-lg">🌊</span>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="bg-gradient-to-br from-indigo-50 to-indigo-100 rounded-lg p-4 border border-indigo-200">
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-indigo-600 text-sm font-medium">Data Quality</p>
+                                        <p class="text-xl font-bold text-indigo-800">98.7%</p>
+                                    </div>
+                                    <div class="w-10 h-10 bg-indigo-200 rounded-full flex items-center justify-center">
+                                        <span class="text-lg">✅</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mt-6">
+            <div class="ocean-card rounded-xl shadow-2xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Active Floats</p>
+                        <p class="text-2xl font-bold text-blue-600">1,247</p>
+                    </div>
+                    <div class="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <span class="text-2xl">🌊</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="ocean-card rounded-xl shadow-2xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Profiles Today</p>
+                        <p class="text-2xl font-bold text-green-600">342</p>
+                    </div>
+                    <div class="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
+                        <span class="text-2xl">📈</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="ocean-card rounded-xl shadow-2xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">BGC Sensors</p>
+                        <p class="text-2xl font-bold text-purple-600">89</p>
+                    </div>
+                    <div class="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
+                        <span class="text-2xl">🔬</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="ocean-card rounded-xl shadow-2xl p-6">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-gray-500 text-sm">Data Coverage</p>
+                        <p class="text-2xl font-bold text-orange-600">94%</p>
+                    </div>
+                    <div class="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
+                        <span class="text-2xl">🎯</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize map
+        let map = L.map('map').setView([10, 75], 4);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Add sample ARGO float locations
+        const floatLocations = [
+            {lat: 15.5, lng: 68.2, id: 'ARGO_001', temp: 28.5, salinity: 35.2},
+            {lat: 8.3, lng: 77.1, id: 'ARGO_002', temp: 29.1, salinity: 34.8},
+            {lat: 12.1, lng: 82.4, id: 'ARGO_003', temp: 27.8, salinity: 35.5},
+            {lat: 6.8, lng: 79.9, id: 'ARGO_004', temp: 28.9, salinity: 34.9},
+            {lat: 18.2, lng: 72.5, id: 'ARGO_005', temp: 26.7, salinity: 35.8},
+            {lat: 4.1, lng: 73.2, id: 'ARGO_006', temp: 29.3, salinity: 34.6}
+        ];
+
+        floatLocations.forEach(float => {
+            const marker = L.circleMarker([float.lat, float.lng], {
+                radius: 8,
+                fillColor: '#3b82f6',
+                color: '#1e40af',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(map);
+            
+            marker.bindPopup(`
+                <div class="p-2">
+                    <h4 class="font-semibold text-blue-600">${float.id}</h4>
+                    <p class="text-sm">Temperature: ${float.temp}°C</p>
+                    <p class="text-sm">Salinity: ${float.salinity} PSU</p>
+                    <p class="text-sm">Location: ${float.lat.toFixed(2)}°N, ${float.lng.toFixed(2)}°E</p>
+                </div>
+            `);
+        });
+
+        // Initialize enhanced temperature profile chart
+        const tempData = {
+            x: [0, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 1250, 1500, 1750, 2000],
+            y: [28.5, 27.8, 26.2, 24.1, 22.1, 19.8, 18.5, 15.2, 12.3, 10.1, 8.7, 6.8, 5.2, 4.1, 3.1],
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Temperature',
+            line: {
+                color: '#dc2626', 
+                width: 4,
+                shape: 'spline',
+                smoothing: 1.3
+            },
+            marker: {
+                size: 8,
+                color: '#dc2626',
+                line: {color: '#ffffff', width: 2}
+            },
+            fill: 'tonexty',
+            fillcolor: 'rgba(220, 38, 38, 0.1)'
+        };
+
+        const tempLayout = {
+            title: {
+                text: 'Temperature vs Depth',
+                font: {size: 16, color: '#374151', family: 'Inter'}
+            },
+            xaxis: {
+                title: {text: 'Depth (meters)', font: {size: 12, color: '#6b7280'}},
+                gridcolor: '#e5e7eb',
+                showgrid: true,
+                zeroline: false
+            },
+            yaxis: {
+                title: {text: 'Temperature (°C)', font: {size: 12, color: '#6b7280'}},
+                autorange: 'reversed',
+                gridcolor: '#e5e7eb',
+                showgrid: true,
+                zeroline: false
+            },
+            plot_bgcolor: 'rgba(248, 250, 252, 0.8)',
+            paper_bgcolor: 'transparent',
+            margin: {t: 50, r: 30, b: 50, l: 60},
+            font: {family: 'Inter', size: 11, color: '#374151'},
+            hovermode: 'closest'
+        };
+
+        Plotly.newPlot('temperatureProfile', [tempData], tempLayout, {
+            responsive: true,
+            displayModeBar: false
+        });
+
+        // Initialize enhanced salinity profile chart
+        const salinityData = {
+            x: [0, 25, 50, 75, 100, 150, 200, 300, 500, 750, 1000, 1250, 1500, 1750, 2000],
+            y: [34.8, 34.9, 35.1, 35.2, 35.3, 35.4, 35.2, 35.0, 34.9, 34.8, 34.7, 34.65, 34.6, 34.55, 34.5],
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Salinity',
+            line: {
+                color: '#2563eb', 
+                width: 4,
+                shape: 'spline',
+                smoothing: 1.3
+            },
+            marker: {
+                size: 8,
+                color: '#2563eb',
+                line: {color: '#ffffff', width: 2}
+            },
+            fill: 'tonexty',
+            fillcolor: 'rgba(37, 99, 235, 0.1)'
+        };
+
+        const salinityLayout = {
+            title: {
+                text: 'Salinity vs Depth',
+                font: {size: 16, color: '#374151', family: 'Inter'}
+            },
+            xaxis: {
+                title: {text: 'Depth (meters)', font: {size: 12, color: '#6b7280'}},
+                gridcolor: '#e5e7eb',
+                showgrid: true,
+                zeroline: false
+            },
+            yaxis: {
+                title: {text: 'Salinity (PSU)', font: {size: 12, color: '#6b7280'}},
+                autorange: 'reversed',
+                gridcolor: '#e5e7eb',
+                showgrid: true,
+                zeroline: false
+            },
+            plot_bgcolor: 'rgba(248, 250, 252, 0.8)',
+            paper_bgcolor: 'transparent',
+            margin: {t: 50, r: 30, b: 50, l: 60},
+            font: {family: 'Inter', size: 11, color: '#374151'},
+            hovermode: 'closest'
+        };
+
+        Plotly.newPlot('salinityProfile', [salinityData], salinityLayout, {
+            responsive: true,
+            displayModeBar: false
+        });
+
+        // Chat functionality
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function sendSampleQuery(query) {
+            document.getElementById('userInput').value = query;
+            sendMessage();
+        }
+
+        
+        async function sendMessage() {
+            const input = document.getElementById('userInput');
+            const message = input.value.trim();
+            if (!message) return;
+
+            const chatContainer = document.getElementById('chatContainer');
+
+        // Add user message
+            const userBubble = document.createElement('div');
+            userBubble.className = 'chat-bubble user';
+            userBubble.innerHTML = `<p><strong>You:</strong> ${message}</p>`;
+            chatContainer.appendChild(userBubble);
+            input.value = '';
+
+        // Typing indicator
+            const typingBubble = document.createElement('div');
+            typingBubble.className = 'chat-bubble bot';
+            typingBubble.innerHTML = `<p><em>AI is thinking...</em></p>`;
+            chatContainer.appendChild(typingBubble);
+
+            try {
+              const res = await fetch('http://localhost:5000/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message })
+              });
+            const data = await res.json();
+            chatContainer.removeChild(typingBubble);
+
+            const aiBubble = document.createElement('div');
+            aiBubble.className = 'chat-bubble bot';
+            aiBubble.innerHTML =`
+              <div class="flex items-start space-x-2">
+                <span class="text-blue-600 font-semibold">🤖 AI:</span>
+                <p class="text-gray-700">${data.reply}</p>
+              </div>`;
+            chatContainer.appendChild(aiBubble);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+          } catch (error) {
+            console.error('Error:', error);
+            typingBubble.innerHTML = `
+               <div class="flex items-start space-x-2">
+                   <span class="text-blue-600 font-semibold">🤖 AI:</span>
+                   <p class="text-red-500">Failed to connect to backend.</p>
+               </div>`;
+          }
+        }
+
+
+        function generateResponse(query) {
+            const responses = {
+                'salinity': 'I found salinity data for the requested region. The profiles show typical tropical ocean characteristics with surface salinity around 34.8-35.2 PSU. The data has been visualized in the salinity profile chart. Would you like me to compare this with historical data?',
+                'temperature': 'Temperature profiles show a clear thermocline structure typical of the Indian Ocean. Surface temperatures range from 26-29°C with rapid cooling below 200m depth. The temperature profile is now displayed in the visualization panel.',
+                'bgc': 'BGC (Bio-Geo-Chemical) sensors are providing valuable data on oxygen, chlorophyll, and pH levels. Currently, 89 active BGC floats are operational in the Indian Ocean region. I can show you specific parameter trends if you specify which BGC variables interest you.',
+                'arabian sea': 'The Arabian Sea region shows interesting seasonal variations. I\'ve identified 23 active ARGO floats in this area. The data shows strong monsoon influences on temperature and salinity profiles. Would you like to see a specific time period analysis?',
+                'equator': 'Equatorial regions show unique oceanographic characteristics. I found 15 profiles near the equator for March 2023. The data reveals typical equatorial upwelling signatures in both temperature and salinity. The visualizations have been updated to reflect this data.',
+                'location': 'I can help you find the nearest ARGO floats to any location. Currently showing 6 active floats in the Indian Ocean region. Click on any marker on the map to see detailed information about that float\'s recent measurements.'
+            };
+
+            const lowerQuery = query.toLowerCase();
+            for (const [key, response] of Object.entries(responses)) {
+                if (lowerQuery.includes(key)) {
+                    return response;
+                }
+            }
+
+            return 'I understand you\'re looking for oceanographic data. I can help you explore ARGO float measurements including temperature, salinity, and BGC parameters. Try asking about specific regions like "Arabian Sea" or parameters like "salinity profiles". I can also help you find the nearest floats to any location.';
+        }
+
+        // Initialize with welcome message
+        document.addEventListener('DOMContentLoaded', function() {
+            // Auto-focus on input
+            document.getElementById('userInput').focus();
+        });
+    </script>
+<script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'97fdfb9e1560f3fd',t:'MTc1ODAwMDc0Mi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>
